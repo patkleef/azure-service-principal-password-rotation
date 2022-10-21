@@ -22,6 +22,7 @@ resource "azurerm_monitor_aad_diagnostic_setting" "aad_diagnostics_setting_audit
     | where Category == 'GroupManagement'
     | where LoggedByService == 'PIM'
     | where OperationName == 'Remove member from role (PIM activation expired)'
+    | where OperationName == 'Add member to role completed (PIM activation)'
     | where TargetResources.displayName == '${azuread_group.demo_group.display_name}'
     | extend GroupName = tostring(TargetResources.displayName)
     | sort by TimeGenerated desc
@@ -42,7 +43,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert" "monitor_scheduled_query_
     | mv-expand TargetResources
     | where Category == 'GroupManagement'
     | where LoggedByService == 'PIM'
-    | where OperationName == 'Add member to role completed (PIM activation)'
+    | where OperationName == 'Remove member from role (PIM activation expired)'
     | sort by TimeGenerated desc
 QUERY
   severity       = 3

@@ -9,6 +9,36 @@ resource "azurerm_automation_account" "automation_account" {
   }
 }
 
+data "azuread_service_principal" "automation_account_managed_identity" {
+  display_name  = "aa-demo"
+
+  depends_on = [
+    azurerm_automation_account.automation_account
+  ]
+}
+
+data "azuread_application_published_app_ids" "well_known" {}
+
+
+data "azuread_service_principal" "msgraph" {
+  application_id = data.azuread_application_published_app_ids.well_known.result.MicrosoftGraph
+}
+
+resource "azuread_app_role_assignment" "app_role_assignment" {
+  app_role_id         = data.azuread_service_principal.msgraph.app_role_ids["Application.ReadWrite.All"]
+  principal_object_id = data.azuread_service_principal.automation_account_managed_identity.object_id
+  resource_object_id  = data.azuread_service_principal.msgraph.object_id
+}
+
+resource "azurerm_role_assignment" "automation_account_kv_secrets_officer" {
+  lifecycle {
+    ignore_changes = [role_definition_id] # see https://github.com/hashicorp/terraform-provider-azurerm/issues/4258
+  }
+  scope              = azurerm_key_vault.kv.id
+  role_definition_id = data.azurerm_role_definition.keyvault_secrets_officer.id
+  principal_id       = data.azuread_service_principal.automation_account_managed_identity.object_id
+}
+
 resource "azurerm_automation_module" "microsoft-graph-authentication" {
   name                    = "Microsoft.Graph.Authentication"
   resource_group_name     = azurerm_resource_group.rg.name
@@ -58,29 +88,23 @@ resource "azurerm_automation_runbook" "run_book_change_spn_password" {
     )
     if ($WebHookData)
     {
-		Write-Output "Webhook data: " $WebHookData
-		# Get the connection "AzureRunAsConnection "
-		$servicePrincipalConnection=Get-AutomationConnection -Name "AzureRunAsConnection"
-		Connect-AzAccount -Tenant $servicePrincipalConnection.TenantID `
-                             -ApplicationId $servicePrincipalConnection.ApplicationID   `
-                             -CertificateThumbprint $servicePrincipalConnection.CertificateThumbprint `
-                             -ServicePrincipal
+		Connect-AzAccount -Identity
 		$targetAdAppName =  Get-AutomationVariable -Name 'AdAppName'
 		$keyvaultName = Get-AutomationVariable -Name 'KeyVaultName'
 		$keyvaultSecretName = Get-AutomationVariable -Name 'KeyVaultSecretName'
-		Connect-MgGraph -ClientID $servicePrincipalConnection.ApplicationId -TenantId $servicePrincipalConnection.TenantId -CertificateThumbprint $servicePrincipalConnection.CertificateThumbprint
-		# get the ad application registration
+    $token = (Get-AzAccessToken -ResourceTypeName MSGraph).token
+		Connect-MgGraph -AccessToken $token
 		$app = Get-MgApplication -Filter "DisplayName eq '$targetAdAppName'"
 		Write-Output "application id: " $app.DisplayName
-		# remove existing passwords
+		
 		foreach ($passwordCredential in $app.PasswordCredentials) {
 			Remove-MgApplicationPassword -ApplicationId $app.Id -KeyId $passwordCredential.KeyId
 		}
-		# add new password
+
 		$newPassword = Add-MgApplicationPassword -ApplicationId $app.Id
 		Write-Output "New password created for ad app"
 		$secretSecureString = ConvertTo-SecureString -String $newPassword.SecretText -AsPlainText -Force
-		# set new password in keyvault secrets
+
 		Set-AzKeyVaultSecret -VaultName $keyvaultName -Name $keyvaultSecretName -SecretValue $secretSecureString -Expires "2099-01-01T00:00:00Z"
 		Write-Output "Password stored in key vault"
     }
@@ -91,31 +115,31 @@ resource "azurerm_automation_runbook" "run_book_change_spn_password" {
     EOF
 }
 
-data "azurerm_key_vault_secret" "automation_account_selfsigned_certificate_base64" {
-  name         = "automation-account-certificate"
-  key_vault_id = azurerm_key_vault.kv.id
-  depends_on = [
-    azurerm_key_vault_certificate.automation_account_selfsigned_certificate
-  ]
-}
+# data "azurerm_key_vault_secret" "automation_account_selfsigned_certificate_base64" {
+#   name         = "automation-account-certificate"
+#   key_vault_id = azurerm_key_vault.kv.id
+#   depends_on = [
+#     azurerm_key_vault_certificate.automation_account_selfsigned_certificate
+#   ]
+# }
 
-resource "azurerm_automation_certificate" "automation_account_certificate" {
-  name                    = "AzureRunAsCertificate"
-  resource_group_name     = azurerm_automation_account.automation_account.resource_group_name
-  automation_account_name = azurerm_automation_account.automation_account.name
-  base64                  = data.azurerm_key_vault_secret.automation_account_selfsigned_certificate_base64.value
-  exportable              = true
-}
+# resource "azurerm_automation_certificate" "automation_account_certificate" {
+#   name                    = "AzureRunAsCertificate"
+#   resource_group_name     = azurerm_automation_account.automation_account.resource_group_name
+#   automation_account_name = azurerm_automation_account.automation_account.name
+#   base64                  = data.azurerm_key_vault_secret.automation_account_selfsigned_certificate_base64.value
+#   exportable              = true
+# }
 
-resource "azurerm_automation_connection_service_principal" "automation_account_connection_spn" {
-  name                    = "AzureRunAsConnection"
-  resource_group_name     = azurerm_automation_account.automation_account.resource_group_name
-  automation_account_name = azurerm_automation_account.automation_account.name
-  application_id          = azuread_service_principal.ad_app_automation_account_spn.application_id
-  tenant_id               = local.tenant_id
-  subscription_id         = local.subscription_id
-  certificate_thumbprint  = azurerm_automation_certificate.automation_account_certificate.thumbprint
-}
+# resource "azurerm_automation_connection_service_principal" "automation_account_connection_spn" {
+#   name                    = "AzureRunAsConnection"
+#   resource_group_name     = azurerm_automation_account.automation_account.resource_group_name
+#   automation_account_name = azurerm_automation_account.automation_account.name
+#   application_id          = azuread_service_principal.ad_app_automation_account_spn.application_id
+#   tenant_id               = local.tenant_id
+#   subscription_id         = local.subscription_id
+#   certificate_thumbprint  = azurerm_automation_certificate.automation_account_certificate.thumbprint
+# }
 
 resource "azurerm_automation_variable_string" "automation_account_variable_keyvaultname" {
   name                    = "KeyVaultName"

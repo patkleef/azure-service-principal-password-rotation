@@ -51,12 +51,12 @@ resource "azurerm_role_assignment" "kv_scertificates_officer" {
 
 resource "azuread_application" "ad_app" {
   display_name            = "app-test"
-  owners                  = [data.azuread_client_config.current_azuread.object_id, azuread_service_principal.ad_app_automation_account_spn.object_id]
+  //owners                  = [data.azuread_client_config.current_azuread.object_id, azuread_service_principal.ad_app_automation_account_spn.object_id]
 }
 
 resource "azuread_service_principal" "ad_spn" {
   application_id               = azuread_application.ad_app.application_id
-  owners                  = [data.azuread_client_config.current_azuread.object_id, azuread_service_principal.ad_app_automation_account_spn.object_id]
+  //owners                  = [data.azuread_client_config.current_azuread.object_id, azuread_service_principal.ad_app_automation_account_spn.object_id]
 }
 
 resource "azuread_service_principal_password" "ad_spn_password" {
