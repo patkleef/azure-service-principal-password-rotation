@@ -51,12 +51,10 @@ resource "azurerm_role_assignment" "kv_scertificates_officer" {
 
 resource "azuread_application" "ad_app" {
   display_name            = "app-test"
-  //owners                  = [data.azuread_client_config.current_azuread.object_id, azuread_service_principal.ad_app_automation_account_spn.object_id]
 }
 
 resource "azuread_service_principal" "ad_spn" {
   application_id               = azuread_application.ad_app.application_id
-  //owners                  = [data.azuread_client_config.current_azuread.object_id, azuread_service_principal.ad_app_automation_account_spn.object_id]
 }
 
 resource "azuread_service_principal_password" "ad_spn_password" {
@@ -103,6 +101,3 @@ resource "azurerm_role_assignment" "demo_group_secrets_user" {
   role_definition_id = data.azurerm_role_definition.keyvault_secrets_user.id
   principal_id       = azuread_group.demo_group.object_id
 }
-
-# https://github.com/hashicorp/terraform-provider-azurerm/issues/11475
-# Due to how Azure saves certificates you need to use the data source azurerm_key_vault_secret. When you upload a certificate which has a private key to Azure Key Vault it will always create a corresponding secret for the private key.

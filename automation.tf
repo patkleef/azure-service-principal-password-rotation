@@ -89,57 +89,37 @@ resource "azurerm_automation_runbook" "run_book_change_spn_password" {
     if ($WebHookData)
     {
 		Connect-AzAccount -Identity
+    Write-Host -NoNewline "Current context: " Get-AzContext
+
 		$targetAdAppName =  Get-AutomationVariable -Name 'AdAppName'
 		$keyvaultName = Get-AutomationVariable -Name 'KeyVaultName'
 		$keyvaultSecretName = Get-AutomationVariable -Name 'KeyVaultSecretName'
+
     $token = (Get-AzAccessToken -ResourceTypeName MSGraph).token
 		Connect-MgGraph -AccessToken $token
+    Write-Host -NoNewline "Connected to Graph API"
+
 		$app = Get-MgApplication -Filter "DisplayName eq '$targetAdAppName'"
-		Write-Output "application id: " $app.DisplayName
+		Write-Host -NoNewline "Get target AD application: " $app.DisplayName
 		
 		foreach ($passwordCredential in $app.PasswordCredentials) {
 			Remove-MgApplicationPassword -ApplicationId $app.Id -KeyId $passwordCredential.KeyId
+      Write-Host -NoNewline "AD application password with KeyId: " passwordCredential.KeyId " removed"
 		}
 
 		$newPassword = Add-MgApplicationPassword -ApplicationId $app.Id
-		Write-Output "New password created for ad app"
+		Write-Host -NoNewline "New password *** created for AD application"
 		$secretSecureString = ConvertTo-SecureString -String $newPassword.SecretText -AsPlainText -Force
 
 		Set-AzKeyVaultSecret -VaultName $keyvaultName -Name $keyvaultSecretName -SecretValue $secretSecureString -Expires "2099-01-01T00:00:00Z"
-		Write-Output "Password stored in key vault"
+		Write-Host -NoNewline "New password *** stored in key vault"
     }
     else
     {
-        Write-Output "No webhook request body found"
+        Write-Host -NoNewline "No webhook request body found"
     }
     EOF
 }
-
-# data "azurerm_key_vault_secret" "automation_account_selfsigned_certificate_base64" {
-#   name         = "automation-account-certificate"
-#   key_vault_id = azurerm_key_vault.kv.id
-#   depends_on = [
-#     azurerm_key_vault_certificate.automation_account_selfsigned_certificate
-#   ]
-# }
-
-# resource "azurerm_automation_certificate" "automation_account_certificate" {
-#   name                    = "AzureRunAsCertificate"
-#   resource_group_name     = azurerm_automation_account.automation_account.resource_group_name
-#   automation_account_name = azurerm_automation_account.automation_account.name
-#   base64                  = data.azurerm_key_vault_secret.automation_account_selfsigned_certificate_base64.value
-#   exportable              = true
-# }
-
-# resource "azurerm_automation_connection_service_principal" "automation_account_connection_spn" {
-#   name                    = "AzureRunAsConnection"
-#   resource_group_name     = azurerm_automation_account.automation_account.resource_group_name
-#   automation_account_name = azurerm_automation_account.automation_account.name
-#   application_id          = azuread_service_principal.ad_app_automation_account_spn.application_id
-#   tenant_id               = local.tenant_id
-#   subscription_id         = local.subscription_id
-#   certificate_thumbprint  = azurerm_automation_certificate.automation_account_certificate.thumbprint
-# }
 
 resource "azurerm_automation_variable_string" "automation_account_variable_keyvaultname" {
   name                    = "KeyVaultName"

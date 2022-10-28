@@ -15,18 +15,6 @@ resource "azurerm_monitor_aad_diagnostic_setting" "aad_diagnostics_setting_audit
  }
 }
 
-#Remove member from role (PIM activation expired)
-/*
-  AuditLogs
-    | mv-expand TargetResources
-    | where Category == 'GroupManagement'
-    | where LoggedByService == 'PIM'
-    | where OperationName == 'Remove member from role (PIM activation expired)'
-    | where OperationName == 'Add member to role completed (PIM activation)'
-    | where TargetResources.displayName == '${azuread_group.demo_group.display_name}'
-    | extend GroupName = tostring(TargetResources.displayName)
-    | sort by TimeGenerated desc
-*/
 resource "azurerm_monitor_scheduled_query_rules_alert" "monitor_scheduled_query_rules_alert" {
   name                = "sqra-pim-group-expiration-${random_integer.suffix.result}"
   location            = azurerm_resource_group.rg.location
