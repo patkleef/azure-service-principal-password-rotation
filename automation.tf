@@ -89,7 +89,6 @@ resource "azurerm_automation_runbook" "run_book_change_spn_password" {
     if ($WebHookData)
     {
 		Connect-AzAccount -Identity
-    Write-Host -NoNewline "Current context: " Get-AzContext
 
 		$targetAdAppName =  Get-AutomationVariable -Name 'AdAppName'
 		$keyvaultName = Get-AutomationVariable -Name 'KeyVaultName'
@@ -97,22 +96,20 @@ resource "azurerm_automation_runbook" "run_book_change_spn_password" {
 
     $token = (Get-AzAccessToken -ResourceTypeName MSGraph).token
 		Connect-MgGraph -AccessToken $token
-    Write-Host -NoNewline "Connected to Graph API"
 
 		$app = Get-MgApplication -Filter "DisplayName eq '$targetAdAppName'"
-		Write-Host -NoNewline "Get target AD application: " $app.DisplayName
 		
 		foreach ($passwordCredential in $app.PasswordCredentials) {
 			Remove-MgApplicationPassword -ApplicationId $app.Id -KeyId $passwordCredential.KeyId
-      Write-Host -NoNewline "AD application password with KeyId: " passwordCredential.KeyId " removed"
+      Write-Output "AD application password removed"
 		}
 
 		$newPassword = Add-MgApplicationPassword -ApplicationId $app.Id
-		Write-Host -NoNewline "New password *** created for AD application"
+		Write-Output "New password *** created for AD application"
 		$secretSecureString = ConvertTo-SecureString -String $newPassword.SecretText -AsPlainText -Force
 
 		Set-AzKeyVaultSecret -VaultName $keyvaultName -Name $keyvaultSecretName -SecretValue $secretSecureString -Expires "2099-01-01T00:00:00Z"
-		Write-Host -NoNewline "New password *** stored in key vault"
+		Write-Output "New password *** stored in key vault"
     }
     else
     {
